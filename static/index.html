@@ -36,17 +36,17 @@
   </div>
 
   <!-- Matrix view -->
-  <div id="view-matrix" class="p-4 flex gap-3" style="min-height: 80vh;">
+  <div id="view-matrix" class="p-4 flex flex-col md:flex-row gap-3" style="min-height: 80vh;">
     <!-- Inbox column on the left -->
-    <div class="bg-white rounded-xl border border-gray-200 flex flex-col w-52 flex-shrink-0">
+    <div class="bg-white rounded-xl border border-gray-200 flex flex-col w-full md:w-52 flex-shrink-0">
       <div class="px-4 pt-3 pb-1">
         <div class="text-xs font-bold uppercase tracking-wider text-gray-500">Inbox</div>
         <div class="text-xs text-gray-400">Unsorted</div>
       </div>
       <div id="q-inbox" data-quadrant="" class="task-zone flex-1 p-3 flex flex-col gap-2 min-h-14 overflow-y-auto"></div>
     </div>
-    <!-- 2x2 matrix on the right -->
-    <div class="flex-1 grid grid-cols-2 gap-3">
+    <!-- quadrants: 1 column on phones, 2x2 on small monitors, 4 columns on widescreen -->
+    <div class="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
       <!-- DO FIRST -->
       <div class="bg-red-50 rounded-xl border border-red-200 flex flex-col">
         <div class="px-4 pt-3 pb-1">
