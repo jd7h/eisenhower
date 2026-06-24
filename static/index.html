@@ -32,6 +32,8 @@
         class="px-4 py-2 bg-white text-gray-600 hover:bg-gray-50">List</button>
       <button id="btn-completed" onclick="setView('completed')"
         class="px-4 py-2 bg-white text-gray-600 hover:bg-gray-50">Completed</button>
+      <button id="btn-projects" onclick="setView('projects')"
+        class="px-4 py-2 bg-white text-gray-600 hover:bg-gray-50">Projects</button>
     </div>
   </div>
 
@@ -94,6 +96,23 @@
     <div id="list-empty" class="hidden text-center text-gray-400 text-sm mt-12">No tasks yet — add one above.</div>
   </div>
 
+  <!-- Projects view -->
+  <div id="view-projects" class="hidden p-4">
+    <div class="mb-4">
+      <input
+        id="project-capture"
+        type="text"
+        placeholder="New project name… press Enter to create"
+        class="w-72 px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 text-sm outline-none transition"
+        autocomplete="off"
+      />
+    </div>
+    <div id="projects-grid" class="flex flex-wrap gap-3 items-start"></div>
+    <div class="mt-4">
+      <button id="toggle-archived-btn" class="hidden text-sm text-gray-400 hover:text-gray-600 transition" onclick="toggleArchivedProjects()"></button>
+    </div>
+  </div>
+
   <script>
     const QUADRANT_COLORS = {
       do:       'bg-red-100 text-red-700',
@@ -107,7 +126,9 @@
     };
 
     let tasks = [];
+    let projects = [];
     let currentView = 'matrix';
+    let showArchivedProjects = false;
 
     // --- API helpers ---
     async function api(method, path, body) {
@@ -125,7 +146,12 @@
       render();
     }
 
-    // --- Capture ---
+    async function loadProjects() {
+      projects = await api('GET', '/projects?include_archived=true');
+      if (currentView === 'projects') renderProjects();
+    }
+
+    // --- Task capture ---
     const captureInput = document.getElementById('capture');
     captureInput.focus();
 
@@ -149,19 +175,32 @@
       render();
     });
 
+    // --- Project capture ---
+    const projectCaptureInput = document.getElementById('project-capture');
+
+    projectCaptureInput.addEventListener('keydown', async (e) => {
+      if (e.key !== 'Enter') return;
+      const name = projectCaptureInput.value.trim();
+      if (!name) return;
+      projectCaptureInput.value = '';
+      const project = await api('POST', '/projects', { name });
+      projects.push(project);
+      renderProjects();
+    });
+
     // --- Render ---
     function render() {
       if (currentView === 'matrix') renderMatrix();
       else if (currentView === 'list') renderList();
       else if (currentView === 'completed') renderCompleted();
+      else if (currentView === 'projects') renderProjects();
     }
 
-    function makeCard(task, forMatrix) {
+    function makeCard(task) {
       const div = document.createElement('div');
-      div.className = 'task-card bg-white rounded-lg border border-gray-200 shadow-sm flex items-stretch group select-none overflow-hidden';
+      div.className = 'task-card bg-white rounded-lg border border-gray-200 shadow-sm flex items-stretch group select-none';
       div.dataset.id = task.id;
 
-      // Drag handle — the dedicated grab zone on the left of the card
       const handle = document.createElement('div');
       handle.className = 'drag-handle flex items-center px-2 bg-gray-50 group-hover:bg-blue-50 text-gray-300 group-hover:text-blue-400 border-r border-gray-100 transition flex-shrink-0';
       handle.title = 'Drag to move';
@@ -241,7 +280,7 @@
       zones.forEach(q => {
         const zone = document.getElementById(q === '' ? 'q-inbox' : `q-${q}`);
         zone.innerHTML = '';
-        tasks.filter(t => (t.quadrant ?? '') === q).forEach(t => zone.appendChild(makeCard(t, true)));
+        tasks.filter(t => (t.quadrant ?? '') === q).forEach(t => zone.appendChild(makeCard(t)));
       });
     }
 
@@ -258,7 +297,6 @@
       container.classList.remove('hidden');
       empty.classList.add('hidden');
 
-      // sort: dated first by date, then undated by created_at
       const sorted = [...tasks].sort((a, b) => {
         if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
         if (a.due_date) return -1;
@@ -392,7 +430,158 @@
       });
     }
 
-    // --- Drag and drop ---
+    // --- Projects view ---
+    function makeProjectBlock(project, tasksInProject) {
+      const isNoProject = project === null;
+      const isArchived = !isNoProject && project.archived;
+
+      const block = document.createElement('div');
+      block.className = `rounded-xl border flex-shrink-0 w-80 ${isArchived ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200'}`;
+
+      const header = document.createElement('div');
+      header.className = 'px-4 pt-3 pb-1 flex items-start justify-between gap-2';
+
+      const headerLeft = document.createElement('div');
+      headerLeft.className = 'flex-1 min-w-0';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'text-xs font-bold uppercase tracking-wider break-words ' + (isNoProject ? 'text-gray-400' : 'text-gray-700');
+      nameEl.textContent = isNoProject ? 'No project' : project.name;
+
+      if (!isNoProject && !isArchived) {
+        nameEl.contentEditable = true;
+        nameEl.addEventListener('blur', async () => {
+          const newName = nameEl.textContent.trim();
+          if (newName && newName !== project.name) {
+            await api('PATCH', `/projects/${project.id}`, { name: newName });
+            project.name = newName;
+          } else {
+            nameEl.textContent = project.name;
+          }
+        });
+        nameEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } });
+      }
+
+      const countEl = document.createElement('div');
+      countEl.className = 'text-xs text-gray-400 mt-0.5';
+      countEl.dataset.count = 'true';
+      const n = tasksInProject.length;
+      countEl.textContent = `${n} task${n !== 1 ? 's' : ''}`;
+
+      headerLeft.appendChild(nameEl);
+      headerLeft.appendChild(countEl);
+      header.appendChild(headerLeft);
+
+      if (!isNoProject) {
+        const actionBtn = document.createElement('button');
+        if (isArchived) {
+          actionBtn.className = 'text-xs text-blue-400 hover:text-blue-600 flex-shrink-0 mt-0.5 transition whitespace-nowrap';
+          actionBtn.textContent = 'Reopen';
+          actionBtn.addEventListener('click', async () => {
+            await api('PATCH', `/projects/${project.id}`, { archived: 0 });
+            project.archived = 0;
+            renderProjects();
+          });
+        } else {
+          actionBtn.className = 'text-xs text-gray-300 hover:text-gray-500 flex-shrink-0 mt-0.5 transition whitespace-nowrap';
+          actionBtn.textContent = 'Close';
+          actionBtn.addEventListener('click', async () => {
+            await api('PATCH', `/projects/${project.id}`, { archived: 1 });
+            project.archived = 1;
+            renderProjects();
+          });
+        }
+        header.appendChild(actionBtn);
+      }
+
+      block.appendChild(header);
+
+      const zone = document.createElement('div');
+      zone.className = 'task-zone-project p-3 flex flex-col gap-2 min-h-14 max-h-[70vh] overflow-y-auto';
+      zone.dataset.projectId = isNoProject ? '' : String(project.id);
+
+      tasksInProject.forEach(t => zone.appendChild(makeCard(t)));
+      block.appendChild(zone);
+
+      return block;
+    }
+
+    function updateProjectBlockCount(zoneEl) {
+      const countEl = zoneEl.parentElement.querySelector('[data-count]');
+      if (!countEl) return;
+      const n = zoneEl.querySelectorAll('.task-card').length;
+      countEl.textContent = `${n} task${n !== 1 ? 's' : ''}`;
+    }
+
+    function renderProjects() {
+      const grid = document.getElementById('projects-grid');
+      grid.innerHTML = '';
+
+      const noProjectTasks = tasks.filter(t => !t.project_id);
+      grid.appendChild(makeProjectBlock(null, noProjectTasks));
+
+      projects.filter(p => !p.archived).forEach(p => {
+        grid.appendChild(makeProjectBlock(p, tasks.filter(t => t.project_id === p.id)));
+      });
+
+      if (showArchivedProjects) {
+        projects.filter(p => p.archived).forEach(p => {
+          grid.appendChild(makeProjectBlock(p, tasks.filter(t => t.project_id === p.id)));
+        });
+      }
+
+      const toggleBtn = document.getElementById('toggle-archived-btn');
+      const archivedCount = projects.filter(p => p.archived).length;
+      if (archivedCount > 0) {
+        toggleBtn.classList.remove('hidden');
+        toggleBtn.textContent = showArchivedProjects
+          ? 'Hide closed projects'
+          : `Show closed projects (${archivedCount})`;
+      } else {
+        toggleBtn.classList.add('hidden');
+      }
+
+      initProjectSortable();
+    }
+
+    function toggleArchivedProjects() {
+      showArchivedProjects = !showArchivedProjects;
+      renderProjects();
+    }
+
+    let projectSortableInstances = [];
+
+    function initProjectSortable() {
+      projectSortableInstances.forEach(s => s.destroy());
+      projectSortableInstances = [];
+
+      document.querySelectorAll('.task-zone-project').forEach(zone => {
+        const s = Sortable.create(zone, {
+          group: 'project-tasks',
+          handle: '.drag-handle',
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          dragClass: 'sortable-drag',
+          onEnd(evt) {
+            if (evt.from === evt.to) return;
+
+            const taskId = parseInt(evt.item.dataset.id);
+            const newProjectIdStr = evt.to.dataset.projectId;
+            const newProjectId = newProjectIdStr === '' ? 0 : parseInt(newProjectIdStr);
+
+            api('PATCH', `/tasks/${taskId}`, { project_id: newProjectId });
+            const task = tasks.find(t => t.id === taskId);
+            if (task) task.project_id = newProjectId === 0 ? null : newProjectId;
+
+            updateProjectBlockCount(evt.from);
+            updateProjectBlockCount(evt.to);
+          }
+        });
+        projectSortableInstances.push(s);
+      });
+    }
+
+    // --- Drag and drop (matrix) ---
     function initSortable() {
       const zones = document.querySelectorAll('.task-zone');
       zones.forEach(zone => {
@@ -419,15 +608,24 @@
       document.getElementById('view-matrix').classList.toggle('hidden', v !== 'matrix');
       document.getElementById('view-list').classList.toggle('hidden', v !== 'list');
       document.getElementById('view-completed').classList.toggle('hidden', v !== 'completed');
-      document.getElementById('btn-matrix').className   = `px-4 py-2 ${v === 'matrix'    ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`;
-      document.getElementById('btn-list').className     = `px-4 py-2 ${v === 'list'      ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`;
-      document.getElementById('btn-completed').className = `px-4 py-2 ${v === 'completed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`;
+      document.getElementById('view-projects').classList.toggle('hidden', v !== 'projects');
+
+      ['matrix', 'list', 'completed', 'projects'].forEach(name => {
+        document.getElementById(`btn-${name}`).className =
+          `px-4 py-2 ${v === name ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`;
+      });
+
+      if (v === 'projects') {
+        projectCaptureInput.focus();
+      }
+
       render();
     }
 
     // --- Init ---
     initSortable();
     loadTasks();
+    loadProjects();
   </script>
 </body>
 </html>

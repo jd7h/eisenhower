@@ -39,6 +39,18 @@ def init_db():
             completed INTEGER NOT NULL DEFAULT 0
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            archived INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    try:
+        conn.execute("ALTER TABLE tasks ADD COLUMN project_id INTEGER")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -52,6 +64,16 @@ class TaskUpdate(BaseModel):
     text: Optional[str] = None
     quadrant: Optional[str] = None
     due_date: Optional[str] = None
+    project_id: Optional[int] = None  # 0 = clear to null
+
+
+class ProjectCreate(BaseModel):
+    name: str
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    archived: Optional[int] = None
 
 
 @app.get("/tasks")
@@ -87,11 +109,12 @@ def update_task(task_id: int, body: TaskUpdate):
         raise HTTPException(status_code=404, detail="Task not found")
 
     fields = {k: v for k, v in body.model_dump().items() if v is not None}
-    # allow explicitly clearing quadrant or due_date by passing empty string
     raw = body.model_dump()
     for key in ("quadrant", "due_date"):
         if raw[key] == "":
             fields[key] = None
+    if raw.get("project_id") == 0:
+        fields["project_id"] = None
 
     if fields:
         set_clause = ", ".join(f"{k} = ?" for k in fields)
@@ -149,6 +172,55 @@ def delete_task(task_id: int):
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
+@app.get("/projects")
+def list_projects(include_archived: bool = False):
+    conn = get_db()
+    if include_archived:
+        rows = conn.execute("SELECT * FROM projects ORDER BY created_at ASC").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM projects WHERE archived = 0 ORDER BY created_at ASC"
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/projects", status_code=201)
+def create_project(body: ProjectCreate):
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO projects (name, created_at) VALUES (?, ?)",
+        (body.name, now),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM projects WHERE id = ?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.patch("/projects/{project_id}")
+def update_project(project_id: int, body: ProjectUpdate):
+    conn = get_db()
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if fields:
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        conn.execute(
+            f"UPDATE projects SET {set_clause} WHERE id = ?",
+            (*fields.values(), project_id),
+        )
+        conn.commit()
+
+    row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    conn.close()
+    return dict(row)
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
