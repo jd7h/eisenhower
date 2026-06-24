@@ -1,0 +1,13 @@
+[Unit]
+Description=Eisenhower task manager (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/full/path/to/eisenhower-repo
+ExecStart=/full/path/to/bin/uv run uvicorn app:app --host 127.0.0.1 --port 5858
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
