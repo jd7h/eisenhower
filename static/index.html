@@ -429,12 +429,46 @@
     }
 
     // --- Projects view ---
-    function makeProjectBlock(project, tasksInProject) {
+    const PROJECT_COLORS = [
+      { bg: '#FFF0F0', border: '#FFD6D6' }, // rose
+      { bg: '#FFF4E6', border: '#FFD9A8' }, // peach
+      { bg: '#FFFBE6', border: '#FFE99A' }, // lemon
+      { bg: '#F0FFF0', border: '#B8F0B8' }, // mint
+      { bg: '#E6FFF8', border: '#A8EFDC' }, // aqua
+      { bg: '#E6F8FF', border: '#A8DEFF' }, // sky
+      { bg: '#EEF0FF', border: '#C4CAFF' }, // periwinkle
+      { bg: '#F8EEFF', border: '#DEB8FF' }, // lavender
+      { bg: '#FFEEF8', border: '#FFB8E8' }, // pink
+      { bg: '#FFF5F0', border: '#FFCBB0' }, // salmon
+      { bg: '#F5FFEE', border: '#C8F0A0' }, // lime
+      { bg: '#EEFFF8', border: '#A0F0D0' }, // seafoam
+      { bg: '#EEFFFF', border: '#A0EEFF' }, // cyan
+      { bg: '#F0EEFF', border: '#C0A8FF' }, // violet
+      { bg: '#FFEEF5', border: '#FFA8D0' }, // mauve
+      { bg: '#FFFAEE', border: '#FFE0A0' }, // honey
+      { bg: '#EEFFF4', border: '#A0F0BC' }, // jade
+      { bg: '#F0F8FF', border: '#A8C8FF' }, // cornflower
+      { bg: '#FFF0FF', border: '#F0A8FF' }, // orchid
+      { bg: '#F0FFFA', border: '#A0FFD8' }, // spearmint
+    ];
+
+    function makeProjectBlock(project, tasksInProject, colorIndex) {
       const isNoProject = project === null;
       const isArchived = !isNoProject && project.archived;
 
+      const color = (!isNoProject && !isArchived && colorIndex != null)
+        ? PROJECT_COLORS[colorIndex % PROJECT_COLORS.length]
+        : null;
+
       const block = document.createElement('div');
-      block.className = `rounded-xl border flex-1 min-w-64 flex flex-col ${isArchived ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200'}`;
+      block.className = `rounded-xl border flex-1 min-w-64 flex flex-col ${isArchived ? 'opacity-60' : ''}`;
+      if (color) {
+        block.style.backgroundColor = color.bg;
+        block.style.borderColor = color.border;
+      } else {
+        block.style.backgroundColor = isArchived ? '#f9fafb' : '#ffffff';
+        block.style.borderColor = '#e5e7eb';
+      }
 
       const header = document.createElement('div');
       header.className = 'px-4 pt-3 pb-1 flex items-start justify-between gap-2';
@@ -516,15 +550,16 @@
       grid.innerHTML = '';
 
       const noProjectTasks = tasks.filter(t => !t.project_id);
-      grid.appendChild(makeProjectBlock(null, noProjectTasks));
+      grid.appendChild(makeProjectBlock(null, noProjectTasks, null));
 
-      projects.filter(p => !p.archived).forEach(p => {
-        grid.appendChild(makeProjectBlock(p, tasks.filter(t => t.project_id === p.id)));
+      const activeProjects = projects.filter(p => !p.archived);
+      activeProjects.forEach((p, i) => {
+        grid.appendChild(makeProjectBlock(p, tasks.filter(t => t.project_id === p.id), i));
       });
 
       if (showArchivedProjects) {
         projects.filter(p => p.archived).forEach(p => {
-          grid.appendChild(makeProjectBlock(p, tasks.filter(t => t.project_id === p.id)));
+          grid.appendChild(makeProjectBlock(p, tasks.filter(t => t.project_id === p.id), null));
         });
       }
 
