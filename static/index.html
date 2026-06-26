@@ -97,7 +97,7 @@
   </div>
 
   <!-- Projects view -->
-  <div id="view-projects" class="hidden p-4">
+  <div id="view-projects" class="hidden p-4 overflow-x-hidden">
     <div class="mb-4 flex items-center gap-4">
       <input
         id="project-capture"
@@ -108,7 +108,7 @@
       />
       <button id="toggle-archived-btn" class="hidden text-sm text-gray-400 hover:text-gray-600 transition" onclick="toggleArchivedProjects()"></button>
     </div>
-    <div id="projects-grid" class="flex gap-3"></div>
+    <div id="projects-grid" class="flex gap-3 overflow-x-auto pb-2"></div>
   </div>
 
   <script>
