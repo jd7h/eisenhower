@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -84,6 +84,22 @@ def list_tasks():
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+@app.get("/tasks.md", response_class=PlainTextResponse)
+def list_tasks_markdown():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE completed = 0 ORDER BY due_date IS NULL, due_date ASC, created_at ASC"
+    ).fetchall()
+    conn.close()
+    lines = []
+    for row in rows:
+        line = f"- [ ] {row['text']}"
+        if row["due_date"]:
+            line += f" (due: {row['due_date']})"
+        lines.append(line)
+    return "\n".join(lines) + "\n" if lines else ""
 
 
 @app.post("/tasks", status_code=201)
