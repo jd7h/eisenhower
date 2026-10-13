@@ -1,6 +1,6 @@
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -179,6 +179,18 @@ def uncomplete_task(task_id: int):
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
+@app.delete("/tasks/old")
+def delete_old_tasks(older_than_days: int = 30):
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM tasks WHERE completed = 0 AND created_at < ?", (cutoff,)).fetchall()
+    if rows:
+        conn.execute("DELETE FROM tasks WHERE completed = 0 AND created_at < ?", (cutoff,))
+        conn.commit()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 @app.delete("/tasks/{task_id}")

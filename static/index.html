@@ -55,6 +55,8 @@
         class="px-4 py-2 bg-white text-gray-600 hover:bg-gray-50">Completed</button>
       <button id="btn-projects" onclick="setView('projects')"
         class="px-4 py-2 bg-white text-gray-600 hover:bg-gray-50">Projects</button>
+      <button id="btn-cleanup" onclick="setView('cleanup')"
+        class="px-4 py-2 bg-white text-gray-600 hover:bg-gray-50">Cleanup</button>
     </div>
   </div>
 
@@ -115,6 +117,28 @@
   <div id="view-list" class="hidden p-4 max-w-3xl mx-auto">
     <div id="list-container" class="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100"></div>
     <div id="list-empty" class="hidden text-center text-gray-400 text-sm mt-12">No tasks yet — add one above.</div>
+  </div>
+
+  <!-- Cleanup view -->
+  <div id="view-cleanup" class="hidden p-4 max-w-3xl mx-auto">
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h2 class="text-sm font-bold text-gray-700 mb-1">Remove old tasks</h2>
+      <p class="text-xs text-gray-400 mb-4">Permanently deletes all incomplete tasks created more than N days ago. Completed tasks are kept.</p>
+      <div class="flex items-center gap-3 mb-6">
+        <label class="text-sm text-gray-600">Older than</label>
+        <input id="cleanup-days" type="number" min="1" value="30"
+          class="w-20 px-3 py-2 rounded-lg border border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 text-sm outline-none transition text-center" />
+        <label class="text-sm text-gray-600">days</label>
+        <button id="cleanup-btn" onclick="runCleanup()"
+          class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition font-medium">
+          Remove old tasks
+        </button>
+      </div>
+      <div id="cleanup-result" class="hidden">
+        <div id="cleanup-summary" class="text-sm text-gray-500 mb-3"></div>
+        <pre id="cleanup-markdown" class="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-xs text-gray-700 font-mono whitespace-pre-wrap overflow-auto max-h-96"></pre>
+      </div>
+    </div>
   </div>
 
   <!-- Projects view -->
@@ -662,6 +686,50 @@
       });
     }
 
+    // --- Cleanup ---
+    async function runCleanup() {
+      const days = parseInt(document.getElementById('cleanup-days').value, 10);
+      if (!days || days < 1) return;
+
+      const btn = document.getElementById('cleanup-btn');
+      btn.disabled = true;
+      btn.textContent = 'Deleting…';
+
+      try {
+        const deleted = await api('DELETE', `/tasks/old?older_than_days=${days}`);
+
+        const resultEl = document.getElementById('cleanup-result');
+        const summaryEl = document.getElementById('cleanup-summary');
+        const markdownEl = document.getElementById('cleanup-markdown');
+
+        if (deleted.length === 0) {
+          summaryEl.textContent = `No tasks older than ${days} days found.`;
+          markdownEl.textContent = '';
+          markdownEl.classList.add('hidden');
+        } else {
+          summaryEl.textContent = `Deleted ${deleted.length} task${deleted.length !== 1 ? 's' : ''} older than ${days} days.`;
+          const lines = deleted.map(t => {
+            const check = t.completed ? 'x' : ' ';
+            let line = `- [${check}] ${t.text}`;
+            if (t.due_date) line += ` (due: ${t.due_date})`;
+            return line;
+          });
+          markdownEl.textContent = lines.join('\n');
+          markdownEl.classList.remove('hidden');
+        }
+
+        resultEl.classList.remove('hidden');
+
+        // Remove deleted tasks from local state and re-render if visible
+        const deletedIds = new Set(deleted.map(t => t.id));
+        tasks = tasks.filter(t => !deletedIds.has(t.id));
+        if (currentView !== 'cleanup') render();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Remove old tasks';
+      }
+    }
+
     // --- View toggle ---
     function setView(v) {
       currentView = v;
@@ -669,8 +737,9 @@
       document.getElementById('view-list').classList.toggle('hidden', v !== 'list');
       document.getElementById('view-completed').classList.toggle('hidden', v !== 'completed');
       document.getElementById('view-projects').classList.toggle('hidden', v !== 'projects');
+      document.getElementById('view-cleanup').classList.toggle('hidden', v !== 'cleanup');
 
-      ['matrix', 'list', 'completed', 'projects'].forEach(name => {
+      ['matrix', 'list', 'completed', 'projects', 'cleanup'].forEach(name => {
         document.getElementById(`btn-${name}`).className =
           `px-4 py-2 ${v === name ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`;
       });
